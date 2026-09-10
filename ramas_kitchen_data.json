@@ -1,0 +1,13 @@
+{
+  "app": "Rama's Kitchen",
+  "version": 1,
+  "menu": [
+    "Paneer",
+    "Thali",
+    "Biryani",
+    "Roti",
+    "Dal",
+    "Rice"
+  ],
+  "orders": []
+}
