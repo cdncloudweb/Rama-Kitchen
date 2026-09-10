@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#2563eb">
+<title>Rama's Kitchen</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#f3f4f6;color:#17202a;font-family:Arial,sans-serif}
+.app{width:100%;max-width:520px;margin:0 auto;min-height:100vh;background:#fff}
+header{background:#2563eb;color:#fff;padding:16px;position:sticky;top:0;z-index:5}
+h1{margin:0;font-size:22px}
+.date{margin-top:4px;font-size:13px;opacity:.9}
+.summary{display:flex;gap:8px;margin-top:12px}
+.stat{background:rgba(255,255,255,.18);padding:8px 12px;border-radius:9px;font-size:13px}
+main{padding:14px}
+.tabs{display:flex;gap:8px;margin-bottom:12px}
+button{border:0;border-radius:9px;padding:10px 13px;font-size:14px;font-weight:600;cursor:pointer}
+.tabs button{flex:1}
+.active{background:#2563eb;color:white}
+.secondary{background:#eef0f3;color:#374151}
+input,select{width:100%;padding:12px;border:1px solid #d5dbe1;border-radius:9px;font-size:16px;background:white}
+.card{border:1px solid #e2e5e9;border-radius:12px;padding:12px;margin-bottom:10px}
+.row{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.flat{font-size:17px;font-weight:700}
+.order{margin-top:6px;color:#4b5563;font-size:14px;line-height:1.45}
+.pending{background:#eef2ff;color:#3730a3}
+.done{background:#dcfce7;color:#166534}
+.danger{background:#fee2e2;color:#991b1b}
+.empty{text-align:center;color:#6b7280;padding:40px 10px}
+.search{margin-bottom:12px}
+.item-row{display:flex;gap:7px;margin-bottom:8px}
+.item-row select{flex:1}
+.qty{width:78px}
+.actions{display:flex;gap:8px;margin-top:15px}
+.actions button{flex:1;padding:13px}
+.add{position:fixed;right:18px;bottom:20px;width:58px;height:58px;border-radius:50%;background:#2563eb;color:#fff;font-size:29px;box-shadow:0 5px 15px rgba(0,0,0,.25)}
+.modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:20;align-items:flex-end}
+.modal.show{display:flex}
+.sheet{background:#fff;width:100%;max-width:520px;margin:auto;border-radius:18px 18px 0 0;padding:18px;max-height:90vh;overflow:auto}
+label{display:block;margin:12px 0 5px;font-size:13px;font-weight:700}
+.close{font-size:16px}
+.small{font-size:12px;color:#6b7280;margin-top:9px;line-height:1.4}
+.history-date{font-size:15px;font-weight:700;margin:15px 0 8px}
+</style>
+</head>
+
+<body>
+<div class="app">
+<header>
+<h1>🍱 Rama's Kitchen</h1>
+<div class="date" id="todayDate"></div>
+<div class="summary">
+<div class="stat"><b id="orderCount">0</b> Orders</div>
+<div class="stat"><b id="itemCount">0</b> Items</div>
+</div>
+</header>
+
+<main>
+<div class="tabs">
+<button id="todayTab" class="active">Today's Orders</button>
+<button id="historyTab" class="secondary">History</button>
+</div>
+
+<section id="todayView">
+<input id="search" class="search" type="search" placeholder="Search flat number...">
+<div id="orderList"></div>
+</section>
+
+<section id="historyView" style="display:none">
+<div id="historyList"></div>
+</section>
+</main>
+
+<button id="addButton" class="add">+</button>
+</div>
+
+<div id="orderModal" class="modal">
+<div class="sheet">
+<div class="row">
+<h2 style="margin:0;font-size:20px">Add Order</h2>
+<button id="closeButton" class="secondary close">✕</button>
+</div>
+
+<label for="flatNumber">Flat number</label>
+<input id="flatNumber" type="text" placeholder="Example: A-204" autocomplete="off">
+
+<label>Items</label>
+<div id="itemRows"></div>
+
+<button id="addItemButton" class="secondary">＋ Add another item</button>
+
+<div class="actions">
+<button id="cancelButton" class="secondary">Cancel</button>
+<button id="saveButton" style="background:#2563eb;color:#fff">Save Order</button>
+</div>
+
+<div class="small">Orders are automatically saved on this device/browser.</div>
+</div>
+</div>
+
+<script>
+(function () {
+    "use strict";
+
+    var STORAGE_KEY = "ramas_kitchen_orders_v1";
+    var MENU = ["Paneer", "Thali", "Biryani", "Roti", "Dal", "Rice"];
+    var orders = [];
+    var editingId = null;
+
+    function todayKey() {
+        var d = new Date();
+        var y = d.getFullYear();
+        var m = String(d.getMonth() + 1).padStart(2, "0");
+        var day = String(d.getDate()).padStart(2, "0");
+        return y + "-" + m + "-" + day;
+    }
+
+    function escapeHtml(value) {
+        return String(value)
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#039;");
+    }
+
+    function loadData() {
+        try {
+            var saved = localStorage.getItem(STORAGE_KEY);
+            if (saved) {
+                var parsed = JSON.parse(saved);
+                if (Array.isArray(parsed)) {
+                    orders = parsed;
+                }
+            }
+        } catch (error) {
+            console.error("Could not load saved orders:", error);
+            orders = [];
+        }
+    }
+
+    function saveData() {
+        try {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(orders));
+        } catch (error) {
+            alert("Could not save the order. Your browser may be blocking local storage.");
+        }
+    }
+
+    function updateHeader() {
+        var todays = orders.filter(function (order) {
+            return order.date === todayKey();
+        });
+
+        var totalItems = todays.reduce(function (total, order) {
+            return total + order.items.reduce(function (sum, item) {
+                return sum + Number(item.qty);
+            }, 0);
+        }, 0);
+
+        document.getElementById("orderCount").textContent = todays.length;
+        document.getElementById("itemCount").textContent = totalItems;
+    }
+
+    function render() {
+        updateHeader();
+
+        var search = document.getElementById("search").value.trim().toLowerCase();
+
+        var todays = orders.filter(function (order) {
+            return order.date === todayKey() &&
+                   order.flat.toLowerCase().indexOf(search) !== -1;
+        });
+
+        var list = document.getElementById("orderList");
+
+        if (todays.length === 0) {
+            list.innerHTML = '<div class="empty">No orders yet.<br>Tap <b>+</b> to add an order.</div>';
+        } else {
+            list.innerHTML = todays.map(function (order) {
+                var itemText = order.items.map(function (item) {
+                    return escapeHtml(item.name) + " × " + item.qty;
+                }).join(" · ");
+
+                return '<div class="card">' +
+                    '<div class="row">' +
+                    '<div class="flat">' + escapeHtml(order.flat) + '</div>' +
+                    '<button class="' + (order.done ? "done" : "pending") +
+                    '" data-action="done" data-id="' + order.id + '">' +
+                    (order.done ? "✓ Done" : "○ Pending") +
+                    '</button>' +
+                    '</div>' +
+                    '<div class="order">' + itemText + '</div>' +
+                    '<div style="margin-top:9px;display:flex;gap:7px">' +
+                    '<button class="secondary" data-action="edit" data-id="' + order.id + '">Edit</button>' +
+                    '<button class="danger" data-action="delete" data-id="' + order.id + '">Delete</button>' +
+                    '</div>' +
+                    '</div>';
+            }).join("");
+        }
+
+        renderHistory();
+    }
+
+    function renderHistory() {
+        var grouped = {};
+
+        orders.forEach(function (order) {
+            if (order.date !== todayKey()) {
+                if (!grouped[order.date]) {
+                    grouped[order.date] = [];
+                }
+                grouped[order.date].push(order);
+            }
+        });
+
+        var dates = Object.keys(grouped).sort().reverse();
+        var box = document.getElementById("historyList");
+
+        if (dates.length === 0) {
+            box.innerHTML = '<div class="empty">No previous orders.</div>';
+            return;
+        }
+
+        var html = "";
+
+        dates.forEach(function (date) {
+            var dateObj = new Date(date + "T12:00:00");
+            var title = dateObj.toLocaleDateString(undefined, {
+                day: "numeric",
+                month: "short",
+                year: "numeric"
+            });
+
+            html += '<div class="history-date">' + title + "</div>";
+
+            grouped[date].forEach(function (order) {
+                var itemText = order.items.map(function (item) {
+                    return escapeHtml(item.name) + " × " + item.qty;
+                }).join(" · ");
+
+                html += '<div class="card">' +
+                    '<div class="flat">' + escapeHtml(order.flat) + "</div>" +
+                    '<div class="order">' + itemText + "</div>" +
+                    "</div>";
+            });
+        });
+
+        box.innerHTML = html;
+    }
+
+    function addItemRow(name, qty) {
+        name = name || MENU[0];
+        qty = qty || 1;
+
+        var row = document.createElement("div");
+        row.className = "item-row";
+
+        var select = document.createElement("select");
+
+        MENU.forEach(function (menuItem) {
+            var option = document.createElement("option");
+            option.value = menuItem;
+            option.textContent = menuItem;
+            if (menuItem === name) {
+                option.selected = true;
+            }
+            select.appendChild(option);
+        });
+
+        var quantity = document.createElement("input");
+        quantity.className = "qty";
+        quantity.type = "number";
+        quantity.min = "1";
+        quantity.value = qty;
+
+        var remove = document.createElement("button");
+        remove.className = "danger";
+        remove.type = "button";
+        remove.textContent = "✕";
+        remove.addEventListener("click", function () {
+            row.remove();
+        });
+
+        row.appendChild(select);
+        row.appendChild(quantity);
+        row.appendChild(remove);
+
+        document.getElementById("itemRows").appendChild(row);
+    }
+
+    function openAdd() {
+        editingId = null;
+        document.getElementById("flatNumber").value = "";
+        document.getElementById("itemRows").innerHTML = "";
+        addItemRow();
+        document.getElementById("orderModal").classList.add("show");
+        document.getElementById("flatNumber").focus();
+    }
+
+    function openEdit(id) {
+        var order = orders.find(function (item) {
+            return item.id === id;
+        });
+
+        if (!order) return;
+
+        editingId = id;
+        document.getElementById("flatNumber").value = order.flat;
+        document.getElementById("itemRows").innerHTML = "";
+
+        order.items.forEach(function (item) {
+            addItemRow(item.name, item.qty);
+        });
+
+        document.getElementById("orderModal").classList.add("show");
+        document.getElementById("flatNumber").focus();
+    }
+
+    function closeModal() {
+        document.getElementById("orderModal").classList.remove("show");
+        editingId = null;
+    }
+
+    function saveOrder() {
+        var flat = document.getElementById("flatNumber").value.trim().toUpperCase();
+
+        if (!flat) {
+            alert("Please enter the flat number.");
+            return;
+        }
+
+        var rows = document.querySelectorAll("#itemRows .item-row");
+        var items = [];
+
+        rows.forEach(function (row) {
+            var select = row.querySelector("select");
+            var qtyInput = row.querySelector("input");
+
+            var qty = parseInt(qtyInput.value, 10);
+
+            if (!qty || qty < 1) {
+                qty = 1;
+            }
+
+            items.push({
+                name: select.value,
+                qty: qty
+            });
+        });
+
+        if (items.length === 0) {
+            alert("Please add at least one item.");
+            return;
+        }
+
+        if (editingId) {
+            var existing = orders.find(function (order) {
+                return order.id === editingId;
+            });
+
+            if (existing) {
+                existing.flat = flat;
+                existing.items = items;
+            }
+        } else {
+            orders.push({
+                id: String(Date.now()),
+                date: todayKey(),
+                flat: flat,
+                items: items,
+                done: false
+            });
+        }
+
+        saveData();
+        closeModal();
+        render();
+    }
+
+    function toggleDone(id) {
+        var order = orders.find(function (item) {
+            return item.id === id;
+        });
+
+        if (!order) return;
+
+        order.done = !order.done;
+        saveData();
+        render();
+    }
+
+    function deleteOrder(id) {
+        if (!confirm("Delete this order?")) return;
+
+        orders = orders.filter(function (order) {
+            return order.id !== id;
+        });
+
+        saveData();
+        render();
+    }
+
+    function showTab(tab) {
+        var todayView = document.getElementById("todayView");
+        var historyView = document.getElementById("historyView");
+        var todayTab = document.getElementById("todayTab");
+        var historyTab = document.getElementById("historyTab");
+
+        if (tab === "today") {
+            todayView.style.display = "block";
+            historyView.style.display = "none";
+            todayTab.className = "active";
+            historyTab.className = "secondary";
+        } else {
+            todayView.style.display = "none";
+            historyView.style.display = "block";
+            todayTab.className = "secondary";
+            historyTab.className = "active";
+        }
+    }
+
+    document.getElementById("todayDate").textContent =
+        new Date().toLocaleDateString(undefined, {
+            weekday: "long",
+            day: "numeric",
+            month: "long",
+            year: "numeric"
+        });
+
+    document.getElementById("addButton").addEventListener("click", openAdd);
+    document.getElementById("closeButton").addEventListener("click", closeModal);
+    document.getElementById("cancelButton").addEventListener("click", closeModal);
+    document.getElementById("saveButton").addEventListener("click", saveOrder);
+
+    document.getElementById("addItemButton").addEventListener("click", function () {
+        addItemRow();
+    });
+
+    document.getElementById("search").addEventListener("input", render);
+
+    document.getElementById("todayTab").addEventListener("click", function () {
+        showTab("today");
+    });
+
+    document.getElementById("historyTab").addEventListener("click", function () {
+        showTab("history");
+    });
+
+    document.getElementById("orderList").addEventListener("click", function (event) {
+        var button = event.target.closest("button[data-action]");
+        if (!button) return;
+
+        var action = button.getAttribute("data-action");
+        var id = button.getAttribute("data-id");
+
+        if (action === "done") toggleDone(id);
+        if (action === "edit") openEdit(id);
+        if (action === "delete") deleteOrder(id);
+    });
+
+    document.getElementById("orderModal").addEventListener("click", function (event) {
+        if (event.target === this) {
+            closeModal();
+        }
+    });
+
+    loadData();
+    render();
+})();
+</script>
+</body>
+</html>
