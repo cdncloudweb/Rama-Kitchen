@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#111827">
+<title>Rama's Kitchen</title>
+<style>
+:root{--bg:#f5f6f8;--card:#fff;--text:#17202a;--muted:#6b7280;--line:#e5e7eb;--dark:#111827;--green:#15803d;--red:#b91c1c}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+header{background:var(--dark);color:#fff;padding:18px 16px;position:sticky;top:0;z-index:5}
+header h1{margin:0;font-size:22px} .date{font-size:13px;opacity:.75;margin-top:4px}
+.wrap{max-width:760px;margin:auto;padding:14px 14px 100px}
+.tabs{display:flex;gap:8px;margin-bottom:12px}
+.tab{flex:1;background:#e5e7eb;color:#374151} .tab.active{background:var(--dark);color:#fff}
+.summary{display:flex;gap:10px;margin-bottom:12px}
+.stat{flex:1;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px;text-align:center}
+.stat b{display:block;font-size:22px} .stat span{font-size:12px;color:var(--muted)}
+.search,input,select,textarea{width:100%;padding:11px;border:1px solid var(--line);border-radius:10px;background:#fff;font-size:15px}
+.search{margin-bottom:12px}
+.card,section{background:var(--card);border:1px solid var(--line);border-radius:15px;padding:14px;margin-bottom:10px}
+.row{display:flex;justify-content:space-between;gap:10px} .flat{font-weight:750;font-size:17px}
+.badge{font-size:11px;padding:4px 8px;border-radius:99px;background:#fef3c7;color:#92400e}
+.badge.done{background:#dcfce7;color:var(--green)}
+.items{margin-top:8px;line-height:1.6} .small{font-size:12px;color:var(--muted);margin-top:4px}
+.actions{display:flex;gap:8px;margin-top:10px} button{border:0;border-radius:10px;padding:9px 12px;font-weight:650;cursor:pointer}
+.primary{background:var(--dark);color:#fff} .success{background:#dcfce7;color:var(--green)} .danger{background:#fee2e2;color:var(--red)} .neutral{background:#e5e7eb;color:#374151}
+.fab{position:fixed;right:18px;bottom:18px;width:58px;height:58px;border-radius:50%;font-size:28px;background:var(--dark);color:#fff;box-shadow:0 8px 25px #0003;z-index:4}
+.item-total{display:flex;justify-content:space-between;padding:9px 0;border-top:1px solid var(--line)} .item-total:first-child{border-top:0}
+.menu-row{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 0;border-top:1px solid var(--line)}
+.menu-row:first-child{border-top:0} .menu-name{font-weight:600}
+.empty{text-align:center;color:var(--muted);padding:22px 8px}
+.modal{display:none;position:fixed;inset:0;background:#0008;z-index:20;padding:16px;overflow:auto}
+.modal.show{display:block} .dialog{max-width:620px;margin:25px auto;background:#fff;border-radius:18px;padding:16px}
+.dialog h2{margin-top:0} label{display:block;font-size:13px;font-weight:650;margin-top:9px}
+.itemline{display:grid;grid-template-columns:1fr 80px 42px;gap:7px;margin-bottom:8px}
+.modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:14px}
+.hidden{display:none}
+</style>
+</head>
+<body>
+<header><h1>🍱 Rama's Kitchen</h1><div class="date" id="date"></div></header>
+
+<main class="wrap">
+  <div class="tabs">
+    <button class="tab active" id="ordersTab">Today's Orders</button>
+    <button class="tab" id="menuTab">Menu</button>
+  </div>
+
+  <div id="ordersPage">
+    <div class="summary">
+      <div class="stat"><b id="orderCount">0</b><span>Orders</span></div>
+      <div class="stat"><b id="itemCount">0</b><span>Total Items</span></div>
+    </div>
+    <input class="search" id="search" placeholder="Search flat number...">
+    <div id="orders"></div>
+    <section><h2>Item Totals</h2><div id="totals"></div></section>
+    <button class="fab" id="addOrderBtn">+</button>
+  </div>
+
+  <div id="menuPage" class="hidden">
+    <section>
+      <div class="row"><h2>Menu Items</h2><button class="primary" id="addMenuBtn">+ Add Item</button></div>
+      <div id="menuList"></div>
+    </section>
+  </div>
+</main>
+
+<div class="modal" id="orderModal">
+  <div class="dialog">
+    <h2 id="orderModalTitle">Add Order</h2>
+    <label>Flat number</label><input id="flat" placeholder="B2 1006">
+    <label>Items</label><div id="itemRows"></div>
+    <button class="neutral" id="addOrderItem">+ Add item</button>
+    <label>Time</label><input id="orderTime" placeholder="5:30 PM">
+    <label>Note</label><textarea id="orderNote" rows="2" placeholder="Optional note"></textarea>
+    <div class="modal-actions"><button class="neutral" id="cancelOrder">Cancel</button><button class="primary" id="saveOrder">Save</button></div>
+  </div>
+</div>
+
+<div class="modal" id="menuModal">
+  <div class="dialog">
+    <h2 id="menuModalTitle">Add Menu Item</h2>
+    <label>Item name</label><input id="menuName" placeholder="e.g. Thali">
+    <div class="modal-actions"><button class="neutral" id="cancelMenu">Cancel</button><button class="primary" id="saveMenu">Save</button></div>
+  </div>
+</div>
+
+<script>
+(() => {
+const SEED={"app": "Rama's Kitchen", "version": 3, "menu": ["Vada Pav", "Paneer Momos", "Veg Momos", "Fried Paneer Momos", "Lemon Soda", "Cold Coffee"], "orders": [{"id": "1001", "date": "2026-09-10", "flat": "B4 1116", "items": [{"name": "Vada Pav", "qty": 1}], "time": "5:45 PM", "status": "pending", "note": ""}, {"id": "1002", "date": "2026-09-10", "flat": "B2 1006", "items": [{"name": "Paneer Momos", "qty": 2}], "time": "", "status": "pending", "note": ""}, {"id": "1003", "date": "2026-09-10", "flat": "B5 519", "items": [{"name": "Veg Momos", "qty": 1}], "time": "5:30 PM", "status": "pending", "note": ""}, {"id": "1004", "date": "2026-09-10", "flat": "B2 307", "items": [{"name": "Veg Momos", "qty": 1}], "time": "5:30 PM", "status": "pending", "note": ""}, {"id": "1005", "date": "2026-09-10", "flat": "B6 1323", "items": [{"name": "Vada Pav", "qty": 3}, {"name": "Fried Paneer Momos", "qty": 1}, {"name": "Lemon Soda", "qty": 1}], "time": "", "status": "pending", "note": ""}, {"id": "1006", "date": "2026-09-10", "flat": "B6 1422", "items": [{"name": "Cold Coffee", "qty": 1}], "time": "", "status": "pending", "note": ""}, {"id": "1007", "date": "2026-09-10", "flat": "B4 915", "items": [{"name": "Vada Pav", "qty": 2}], "time": "5:30 PM", "status": "pending", "note": "Extra chilli if possible 😋"}, {"id": "1008", "date": "2026-09-10", "flat": "B1 301", "items": [{"name": "Veg Momos", "qty": 1}], "time": "5:30 PM", "status": "pending", "note": ""}, {"id": "1009", "date": "2026-09-10", "flat": "B2 905", "items": [{"name": "Paneer Momos", "qty": 1}], "time": "5:30 PM", "status": "pending", "note": ""}, {"id": "1010", "date": "2026-09-10", "flat": "B8 230", "items": [{"name": "Paneer Momos", "qty": 1}], "time": "5:30–6:00 PM", "status": "pending", "note": ""}, {"id": "1011", "date": "2026-09-10", "flat": "B2 806", "items": [{"name": "Veg Momos", "qty": 1}], "time": "6:00 PM", "status": "pending", "note": ""}, {"id": "1012", "date": "2026-09-10", "flat": "B6 1022", "items": [{"name": "Vada Pav", "qty": 2}, {"name": "Veg Momos", "qty": 1}], "time": "", "status": "pending", "note": ""}, {"id": "1013", "date": "2026-09-10", "flat": "B2 1007", "items": [{"name": "Vada Pav", "qty": 1}, {"name": "Veg Momos", "qty": 1}], "time": "", "status": "pending", "note": ""}, {"id": "1014", "date": "2026-09-10", "flat": "B4 014", "items": [{"name": "Vada Pav", "qty": 2}, {"name": "Veg Momos", "qty": 1}], "time": "6:30 PM", "status": "pending", "note": ""}]};
+const ORDERS_KEY="ramas_kitchen_orders_v3";
+const MENU_KEY="ramas_kitchen_menu_v3";
+let orders=JSON.parse(localStorage.getItem(ORDERS_KEY)||"null") || SEED.orders;
+let menu=JSON.parse(localStorage.getItem(MENU_KEY)||"null") || SEED.menu;
+let editingOrder=null, editingMenu=null;
+
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const today=()=>new Date().toISOString().slice(0,10);
+const saveAll=()=>{localStorage.setItem(ORDERS_KEY,JSON.stringify(orders));localStorage.setItem(MENU_KEY,JSON.stringify(menu));render();};
+
+function render(){
+  $("date").textContent=new Date().toLocaleDateString("en-IN",{day:"2-digit",month:"2-digit",year:"numeric"});
+  const q=$("search").value.trim().toLowerCase();
+  const todays=orders.filter(o=>o.date===today() && (!q||o.flat.toLowerCase().includes(q)));
+  const totals={};
+  todays.forEach(o=>(o.items||[]).forEach(i=>totals[i.name]=(totals[i.name]||0)+(Number(i.qty)||0)));
+  $("orderCount").textContent=todays.length;
+  $("itemCount").textContent=Object.values(totals).reduce((a,b)=>a+b,0);
+  $("orders").innerHTML=todays.length?todays.map(o=>`
+    <article class="card">
+      <div class="row"><span class="flat">${esc(o.flat)}</span><span class="badge ${o.status==="done"?"done":""}">${o.status==="done"?"Done":"Pending"}</span></div>
+      ${o.time?`<div class="small">Time: ${esc(o.time)}</div>`:""}
+      <div class="items">${(o.items||[]).map(i=>`${esc(i.name)} × ${i.qty}`).join("<br>")}</div>
+      ${o.note?`<div class="small">📝 ${esc(o.note)}</div>`:""}
+      <div class="actions">
+        <button class="success" onclick="toggleDone('${o.id}')">${o.status==="done"?"Mark Pending":"Mark Done"}</button>
+        <button class="neutral" onclick="editOrder('${o.id}')">Edit</button>
+        <button class="danger" onclick="deleteOrder('${o.id}')">Delete</button>
+      </div>
+    </article>`).join(""):`<div class="empty">No orders found.</div>`;
+  $("totals").innerHTML=Object.keys(totals).length?Object.entries(totals).map(([n,v])=>`<div class="item-total"><span>${esc(n)}</span><b>${v}</b></div>`).join(""):`<div class="empty">No items ordered today.</div>`;
+  $("menuList").innerHTML=menu.length?menu.map((n,i)=>`<div class="menu-row"><span class="menu-name">${esc(n)}</span><span><button class="neutral" onclick="editMenu(${i})">Edit</button> <button class="danger" onclick="deleteMenu(${i})">Delete</button></span></div>`).join(""):`<div class="empty">No menu items.</div>`;
+}
+
+function openOrder(id=null){
+  editingOrder=id; const o=id?orders.find(x=>x.id===id):null;
+  $("orderModalTitle").textContent=id?"Edit Order":"Add Order";
+  $("flat").value=o?.flat||""; $("orderTime").value=o?.time||""; $("orderNote").value=o?.note||"";
+  $("itemRows").innerHTML="";
+  (o?.items?.length?o.items:[{name:menu[0]||"",qty:1}]).forEach(i=>addOrderRow(i.name,i.qty));
+  $("orderModal").classList.add("show");
+}
+function addOrderRow(name="",qty=1){
+  const d=document.createElement("div");d.className="itemline";
+  d.innerHTML=`<select>${menu.map(x=>`<option value="${esc(x)}" ${x===name?"selected":""}>${esc(x)}</option>`).join("")}</select><input type="number" min="1" value="${qty}"><button class="danger" type="button">×</button>`;
+  d.querySelector("button").onclick=()=>d.remove();$("itemRows").appendChild(d);
+}
+function closeOrder(){$("orderModal").classList.remove("show");editingOrder=null;}
+function openMenu(i=null){
+  editingMenu=i;$("menuModalTitle").textContent=i===null?"Add Menu Item":"Edit Menu Item";$("menuName").value=i===null?"":menu[i];$("menuModal").classList.add("show");$("menuName").focus();
+}
+function closeMenu(){$("menuModal").classList.remove("show");editingMenu=null;}
+
+window.toggleDone=id=>{const o=orders.find(x=>x.id===id);if(o)o.status=o.status==="done"?"pending":"done";saveAll();};
+window.deleteOrder=id=>{if(confirm("Delete this order?")){orders=orders.filter(x=>x.id!==id);saveAll();}};
+window.editOrder=id=>openOrder(id);
+window.editMenu=i=>openMenu(i);
+window.deleteMenu=i=>{
+  if(confirm("Delete this menu item? Existing orders will keep their item name.")){menu.splice(i,1);saveAll();}
+};
+
+$("ordersTab").onclick=()=>{$("ordersPage").classList.remove("hidden");$("menuPage").classList.add("hidden");$("ordersTab").classList.add("active");$("menuTab").classList.remove("active");};
+$("menuTab").onclick=()=>{$("menuPage").classList.remove("hidden");$("ordersPage").classList.add("hidden");$("menuTab").classList.add("active");$("ordersTab").classList.remove("active");};
+$("search").oninput=render;
+$("addOrderBtn").onclick=()=>openOrder();
+$("addOrderItem").onclick=()=>addOrderRow(menu[0]||"",1);
+$("cancelOrder").onclick=closeOrder;
+$("saveOrder").onclick=()=>{
+  const flat=$("flat").value.trim();if(!flat){alert("Enter flat number.");return;}
+  const items=[...$("itemRows").children].map(r=>({name:r.querySelector("select").value,qty:Number(r.querySelector("input").value)||1})).filter(x=>x.name);
+  if(!items.length){alert("Add at least one item.");return;}
+  const payload={flat,items,time:$("orderTime").value.trim(),note:$("orderNote").value.trim()};
+  if(editingOrder)Object.assign(orders.find(x=>x.id===editingOrder),payload);
+  else orders.unshift({id:String(Date.now()),date:today(),status:"pending",...payload});
+  saveAll();closeOrder();
+};
+$("addMenuBtn").onclick=()=>openMenu();
+$("cancelMenu").onclick=closeMenu;
+$("saveMenu").onclick=()=>{
+  const n=$("menuName").value.trim();if(!n){alert("Enter item name.");return;}
+  if(editingMenu===null){if(menu.some(x=>x.toLowerCase()===n.toLowerCase())){alert("This item already exists.");return;}menu.push(n);}
+  else menu[editingMenu]=n;
+  saveAll();closeMenu();
+};
+render();
+})();
+</script>
+</body>
+</html>
